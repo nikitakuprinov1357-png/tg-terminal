@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Crypto Terminal PRO</title>
+    <title>Trade Guard Terminal PRO</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body { 
@@ -12,13 +12,14 @@
             color: #eaecef; 
             margin: 0; padding: 15px; 
             display: flex; flex-direction: column; gap: 15px;
+            overflow: hidden;
         }
         .header { display: flex; justify-content: space-between; align-items: center; }
         .status-dot { height: 8px; width: 8px; background-color: #02d1a0; border-radius: 50%; display: inline-block; margin-right: 5px; box-shadow: 0 0 10px #02d1a0; }
         .balance-card { background: #1e2329; padding: 20px; border-radius: 16px; border: 1px solid #333; }
         .balance-label { color: #848e9c; font-size: 13px; margin-bottom: 8px; }
         .balance-amount { font-size: 28px; font-weight: bold; color: #ffffff; }
-        .chart-container { width: 100%; height: 320px; background: #161a1e; border-radius: 16px; overflow: hidden; border: 1px solid #2b3139; }
+        .chart-container { width: 100%; height: 300px; background: #161a1e; border-radius: 16px; overflow: hidden; border: 1px solid #2b3139; }
         .trade-box { background: #1e2329; padding: 20px; border-radius: 16px; border: 1px solid #333; }
         .input-row { display: flex; gap: 10px; margin-bottom: 15px; }
         select, input { background: #2b3139; border: 1px solid #474d57; color: white; padding: 12px; border-radius: 8px; font-size: 16px; outline: none; }
@@ -33,51 +34,90 @@
 </head>
 <body>
     <div class="header">
-        <span style="font-weight: bold; color: #f0b90b;">TERMINAL V15 PRO</span>
+        <span style="font-weight: bold; color: #f0b90b;">TRADE GUARD PRO V5</span>
         <span style="font-size: 12px;"><span class="status-dot"></span> LIVE</span>
     </div>
+    
     <div class="balance-card">
         <div class="balance-label">Доступный баланс (DEMO)</div>
-        <div class="balance-amount">10,000.00 USDT</div>
+        <div class="balance-amount" id="balance">10,000.00 USDT</div>
     </div>
+
     <div class="chart-container">
         <iframe id="widget" src="https://s.tradingview.com/widgetembed/?symbol=BINANCE%3ABTCUSDT&interval=60&theme=dark" width="100%" height="100%" frameborder="0"></iframe>
     </div>
+
     <div class="trade-box">
         <div class="price-line" id="price">Загрузка цены...</div>
         <div class="input-row">
             <select id="asset" onchange="updateChart()">
-                <option value="BTCUSDT">BTC</option>
-                <option value="ETHUSDT">ETH</option>
-                <option value="SOLUSDT">SOL</option>
+                <option value="BTCUSDT">BTC/USDT</option>
+                <option value="ETHUSDT">ETH/USDT</option>
+                <option value="SOLUSDT">SOL/USDT</option>
+                <option value="BNBUSDT">BNB/USDT</option>
             </select>
-            <input type="number" id="amount" placeholder="Кол-во">
+            <input type="number" id="amount" placeholder="Кол-во" step="0.001">
         </div>
         <div class="btn-group">
-            <button class="btn-buy" onclick="trade('buy')">КУПИТЬ</button>
-            <button class="btn-sell" onclick="trade('sell')">ПРОДАТЬ</button>
+            <button class="btn-buy" onclick="makeTrade('buy')">КУПИТЬ</button>
+            <button class="btn-sell" onclick="makeTrade('sell')">ПРОДАТЬ</button>
         </div>
     </div>
+
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
+
+        // Функция обновления цены
         async function getPrice() {
-            const s = document.getElementById('asset').value;
-            const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${s}`);
-            const d = await r.json();
-            document.getElementById('price').innerText = `Цена: ${parseFloat(d.price).toFixed(2)} USDT`;
+            const symbol = document.getElementById('asset').value;
+            try {
+                const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+                const data = await response.json();
+                const price = parseFloat(data.price).toFixed(2);
+                document.getElementById('price').innerText = `Текущая цена: ${price} USDT`;
+            } catch (e) {
+                document.getElementById('price').innerText = "Ошибка загрузки цены";
+            }
         }
+
+        // Обновление графика
         function updateChart() {
-            const s = document.getElementById('asset').value;
-            document.getElementById('widget').src = `https://s.tradingview.com/widgetembed/?symbol=BINANCE%3A${s}&interval=60&theme=dark`;
+            const symbol = document.getElementById('asset').value;
+            document.getElementById('widget').src = `https://s.tradingview.com/widgetembed/?symbol=BINANCE%3A${symbol}&interval=60&theme=dark`;
             getPrice();
         }
-        function trade(type) {
-            const val = document.getElementById('amount').value;
-            if(!val) return tg.showAlert("Введите количество");
-            tg.sendData(JSON.stringify({action: type, symbol: document.getElementById('asset').value, amount: val}));
+
+        // Основная функция сделки
+        function makeTrade(type) {
+            const symbol = document.getElementById('asset').value;
+            const amount = document.getElementById('amount').value;
+
+            if (!amount || amount <= 0) {
+                tg.showAlert("Пожалуйста, введите корректное количество!");
+                return;
+            }
+
+            const actionText = type === 'buy' ? "КУПИТЬ" : "ПРОДАТЬ";
+
+            // Показываем подтверждение
+            tg.showConfirm(`Вы уверены, что хотите ${actionText} ${amount} ${symbol.replace('USDT', '')}?`, (confirm) => {
+                if (confirm) {
+                    const data = {
+                        action: type,
+                        symbol: symbol.replace('USDT', '/USDT'),
+                        amount: parseFloat(amount)
+                    };
+                    
+                    // Отправка данных боту и закрытие приложения
+                    tg.sendData(JSON.stringify(data));
+                }
+            });
         }
-        setInterval(getPrice, 3000); getPrice();
+
+        // Обновляем цену каждые 5 секунд
+        setInterval(getPrice, 5000);
+        getPrice();
     </script>
 </body>
 </html>
