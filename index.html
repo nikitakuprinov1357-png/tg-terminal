@@ -3,93 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TRADE GUARD PRO V6.5</title>
+    <title>TRADE GUARD ULTIMATE</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --bg: #0b0e11; --card: #1e2329; --accent: #f0b90b; --green: #02d1a0; --red: #f6465d; --text: #eaecef; --border: #2b3139; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; overflow-x: hidden; }
         
-        /* Вкладки */
         .tabs { display: flex; gap: 4px; margin-bottom: 10px; background: #161a1e; padding: 4px; border-radius: 10px; }
-        .tab { flex: 1; text-align: center; padding: 10px; font-size: 12px; border-radius: 8px; cursor: pointer; color: #848e9c; transition: 0.2s; }
+        .tab { flex: 1; text-align: center; padding: 10px; font-size: 11px; border-radius: 8px; cursor: pointer; color: #848e9c; }
         .tab.active { background: var(--card); color: var(--accent); font-weight: bold; border: 1px solid var(--border); }
 
         .tab-content { display: none; }
         .tab-content.active { display: block; animation: fadeIn 0.3s; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Карточки */
         .card { background: var(--card); padding: 15px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 10px; }
-        .chart-container { width: 100%; height: 260px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 10px; }
+        .chart-container { width: 100%; height: 240px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 10px; }
         
-        label { font-size: 11px; color: #848e9c; display: block; margin-bottom: 5px; }
+        label { font-size: 10px; color: #848e9c; display: block; margin-bottom: 5px; text-transform: uppercase; }
         select, input { width: 100%; background: #2b3139; border: 1px solid #474d57; color: white; padding: 12px; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; margin-bottom: 10px; }
         
         .leverage-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 15px; }
         .lev-btn { background: #2b3139; border: 1px solid #474d57; color: white; padding: 8px; border-radius: 6px; font-size: 11px; cursor: pointer; }
-        .lev-btn.active { background: var(--accent); color: black; border-color: var(--accent); font-weight: bold; }
+        .lev-btn.active { background: var(--accent); color: black; font-weight: bold; }
 
         .btn-group { display: flex; gap: 10px; }
-        .action { flex: 1; padding: 16px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
+        .action { flex: 1; padding: 16px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; }
         .buy { background: var(--green); color: black; }
         .sell { background: var(--red); color: white; }
-        .action:active { transform: scale(0.96); }
-
-        .status-msg { text-align: center; padding: 30px; color: #848e9c; }
+        .empty-state { text-align: center; padding: 30px; color: #848e9c; }
+        .withdraw-btn { background: var(--accent); color: black; width: 100%; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; }
     </style>
 </head>
 <body>
 
     <div class="tabs">
         <div class="tab active" onclick="switchTab('trade', this)">ТРЕЙДИНГ</div>
-        <div class="tab" onclick="switchTab('orders', this)">СДЕЛКИ</div>
         <div class="tab" onclick="switchTab('history', this)">ИСТОРИЯ</div>
+        <div class="tab" onclick="switchTab('withdraw', this)">ВЫВОД</div>
     </div>
 
     <!-- ТРЕЙДИНГ -->
     <div id="trade-tab" class="tab-content active">
         <div class="chart-container">
-            <iframe id="tv-chart" src="https://s.tradingview.com/widgetembed/?symbol=BINANCE:BTCUSDT&interval=60&theme=dark" width="100%" height="100%" frameborder="0"></iframe>
+            <iframe id="tv-chart" src="https://s.tradingview.com/widgetembed/?symbol=BINANCE:BTCUSDT&theme=dark" width="100%" height="100%" frameborder="0"></iframe>
         </div>
 
         <div class="card">
-            <label>ВЫБЕРИТЕ ИНСТРУМЕНТ</label>
+            <label>Инструмент</label>
             <select id="asset" onchange="updateChart()">
-                <option value="BTCUSDT">BTC / USDT (Bitcoin)</option>
-                <option value="ETHUSDT">ETH / USDT (Ethereum)</option>
-                <option value="SOLUSDT">SOL / USDT (Solana)</option>
-                <option value="XRPUSDT">XRP / USDT (Ripple)</option>
-                <option value="BNBUSDT">BNB / USDT (Binance Coin)</option>
-                <option value="DOGEUSDT">DOGE / USDT (Dogecoin)</option>
-                <option value="ADAUSDT">ADA / USDT (Cardano)</option>
-                <option value="AVAXUSDT">AVAX / USDT (Avalanche)</option>
-                <option value="DOTUSDT">DOT / USDT (Polkadot)</option>
-                <option value="LINKUSDT">LINK / USDT (Chainlink)</option>
-                <option value="MATICUSDT">MATIC / USDT (Polygon)</option>
-                <option value="LTCUSDT">LTC / USDT (Litecoin)</option>
-                <option value="SHIBUSDT">SHIB / USDT (Shiba Inu)</option>
-                <option value="TRXUSDT">TRX / USDT (Tron)</option>
-                <option value="NEARUSDT">NEAR / USDT (Near Protocol)</option>
-                <option value="ATOMUSDT">ATOM / USDT (Cosmos)</option>
-                <option value="UNIUSDT">UNI / USDT (Uniswap)</option>
-                <option value="APTUSDT">APT / USDT (Aptos)</option>
-                <option value="ARBUSDT">ARB / USDT (Arbitrum)</option>
-                <option value="OPUSDT">OP / USDT (Optimism)</option>
-                <option value="PEPEUSDT">PEPE / USDT (Pepe Coin)</option>
+                <option value="BTCUSDT">Bitcoin (BTC)</option>
+                <option value="ETHUSDT">Ethereum (ETH)</option>
+                <option value="SOLUSDT">Solana (SOL)</option>
+                <option value="XRPUSDT">Ripple (XRP)</option>
+                <option value="DOGEUSDT">Dogecoin (DOGE)</option>
+                <option value="BNBUSDT">Binance Coin (BNB)</option>
+                <option value="AVAXUSDT">Avalanche (AVAX)</option>
+                <option value="MATICUSDT">Polygon (MATIC)</option>
+                <option value="DOTUSDT">Polkadot (DOT)</option>
+                <option value="LTCUSDT">Litecoin (LTC)</option>
+                <option value="PEPEUSDT">Pepe (PEPE)</option>
+                <option value="SHIBUSDT">Shiba Inu (SHIB)</option>
+                <option value="NEARUSDT">Near (NEAR)</option>
             </select>
 
-            <label>КРЕДИТНОЕ ПЛЕЧО</label>
+            <label>Плечо</label>
             <div class="leverage-grid">
                 <button class="lev-btn active" onclick="setLev(1, this)">x1</button>
-                <button class="lev-btn" onclick="setLev(10, this)">x10</button>
                 <button class="lev-btn" onclick="setLev(20, this)">x20</button>
                 <button class="lev-btn" onclick="setLev(50, this)">x50</button>
-                <button class="lev-btn" onclick="setLev(75, this)">x75</button>
-                <button class="lev-btn" onclick="setLev(100, this)">x100</button>
                 <button class="lev-btn" onclick="setLev(125, this)">x125</button>
             </div>
 
-            <label>СУММА СДЕЛКИ (USDT)</label>
+            <label>Сумма USDT</label>
             <input type="number" id="amount" value="100">
 
             <div class="btn-group">
@@ -99,24 +85,22 @@
         </div>
     </div>
 
-    <!-- ВКЛАДКА СДЕЛКИ -->
-    <div id="orders-tab" class="tab-content">
-        <div class="card">
-            <div class="status-msg">
-                <div style="font-size: 40px;">📦</div>
-                У вас нет
-открытых сделок в данный момент.
-            </div>
+    <!-- ИСТОРИЯ -->
+    <div id="history-tab" class="tab-content">
+        <div class="card empty-state">
+            <div style="font-size: 40px;">📜</div>
+            <p>История пуста. Все ваши сделки сохраняются в базе данных бота.</p>
         </div>
     </div>
 
-    <!-- ВКЛАДКА ИСТОРИЯ -->
-    <div id="history-tab" class="tab-content">
+    <!-- ВЫВОД -->
+    <div id="withdraw-tab" class="tab-content">
         <div class="card">
-            <div class="status-msg">
-                <div style="font-size: 40px;">📜</div>
-                История пуста. Ваши завершенные ордера появятся здесь.
-            </div>
+            <label>Адрес кошелька (TRC-20)</label>
+            <input type="text" id="wallet" placeholder="T...">
+            <label>Сумма вывода</label>
+            <input type="number" id="w_amount" placeholder="Min 10 USDT">
+            <button class="withdraw-btn" onclick="withdraw()">СОЗДАТЬ ЗАЯВКУ</button>
         </div>
     </div>
 
@@ -129,7 +113,8 @@
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             el.classList.add('active');
-            document.getElementById(id + '-tab').classList.add('active');
+            documen
+t.getElementById(id + '-tab').classList.add('active');
         }
 
         function setLev(val, el) {
@@ -140,17 +125,28 @@
 
         function updateChart() {
             const sym = document.getElementById('asset').value;
-            document.getElementById('tv-chart').src = `https://s.tradingview.com/widgetembed/?symbol=BINANCE:${sym}&interval=60&theme=dark`;
+            document.getElementById('tv-chart').src = `https://s.tradingview.com/widgetembed/?symbol=BINANCE:${sym}&theme=dark`;
         }
 
         function process(side) {
-            const data = {
+            tg.sendData(JSON.stringify({
+                type: 'trade',
                 action: side,
                 symbol: document.getElementById('asset').value,
                 amount: document.getElementById('amount').value,
                 lev: currentLev
-            };
-            tg.sendData(JSON.stringify(data));
+            }));
+        }
+
+        function withdraw() {
+            const addr = document.getElementById('wallet').value;
+            const amt = document.getElementById('w_amount').value;
+            if(!addr || !amt) return tg.showAlert("Заполните все поля!");
+            tg.sendData(JSON.stringify({
+                type: 'withdraw',
+                wallet: addr,
+                amount: amt
+            }));
         }
     </script>
 </body>
