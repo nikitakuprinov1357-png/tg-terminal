@@ -1,67 +1,418 @@
-<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<title>MiniApp</title>
-<style>
-body {font-family: Arial, sans-serif; background:#f4f6fb; margin:8px;}
-.card {background:#fff; border-radius:10px; padding:10px; box-shadow:0 0 12px rgba(0,0,0,0.08); margin-bottom:10px;}
-.tab {display:flex; gap:6px; margin-bottom:10px;}
-.tab button {flex:1; border:none; border-radius:8px; background:#2563eb; color:#fff; padding:8px; cursor:pointer;}
-input,select,textarea {width:100%; margin:4px 0; padding:8px; border:1px solid #ccc; border-radius:6px;}
-button.action {width:100%; border:none; border-radius:8px; background:#2563eb; color:#fff; padding:10px; cursor:pointer;}
-iframe {width:100%; height:280px; border-radius:8px; border:1px solid #ddd; margin-bottom:10px;}
-</style>
-</head>
-<body>
-<div class="tab">
-  <button onclick="show('trade')">Торговля</button>
-  <button onclick="show('deposit')">Депозит</button>
-  <button onclick="show('withdraw')">Вывод</button>
-  <button onclick="show('support')">Поддержка</button>
-</div>
+import json
+import logging
+import os
+import sqlite3
+from datetime import datetime
 
-<div class="card">
-  <h3>График BTC/USDT</h3>
-  <iframe src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_1&symbol=COINBASE:BTCUSD&interval=60&theme=light&style=1"></iframe>
-</div>
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+    WebAppInfo,
+)
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
-<div class="card" id="trade">
-  <h3>Открыть сделку</h3>
-  <select id="coin"><option value="BTC">BTC</option><option value="ETH">ETH</option><option value="USDT">USDT</option></select>
-  <input id="amount" type="number" placeholder="Сумма" value="10">
-  <input id="price" type="number" placeholder="Цена" value="1">
-  <select id="direction"><option value="long">Long</option><option value="short">Short</option></select>
-  <button class="action" onclick="sendTrade()">Открыть</button>
-</div>
+TOKEN = os.getenv("BOT_TOKEN", "")
+ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", "7605916395"))
+DATABASE = os.getenv("BOT_DATABASE", "bot_data.db")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://gop352.github.io/tg-terminal/")
 
-<div class="card" id="deposit" style="display:none;">
-  <h3>Депозит</h3>
-  <input id="dep_amount" type="number" placeholder="Сумма" value="20">
-  <select id="dep_method"><option value="crypto">Crypto</option><option value="card">Карта</option></select>
-  <button class="action" onclick="sendDeposit()">Пополнить</button>
-</div>
+ALLOWED_COINS = {"BTC", "ETH"}
+ALLOWED_DIRECTIONS = {"long", "short"}
+MAX_SUPPORT_LEN = 1000
+MAX_WALLET_LEN = 128
 
-<div class="card" id="withdraw" style="display:none;">
-  <h3>Вывод</h3>
-  <input id="w_amount" type="number" placeholder="Сумма" value="10">
-  <input id="w_wallet" type="text" placeholder="Кошелек">
-  <button class="action" onclick="sendWithdraw()">Вывести</button>
-</div>
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 
-<div class="card" id="support" style="display:none;">
-  <h3>Техподдержка</h3>
-  <textarea id="support_text" rows="4" placeholder="Опишите проблему"></textarea>
-  <button class="action" onclick="sendSupport()">Отправить</button>
-</div>
 
-<script>
-const tg = window.Telegram.WebApp; tg.expand();
-function show(tab){["trade","deposit","withdraw","support"].forEach(id=>document.getElementById(id).style.display = id===tab?"block":"none");}
-function sendTrade(){tg.sendData(JSON.stringify({action:"trade", coin:document.getElementById("coin").value, amount:document.getElementById("amount").value, price:document.getElementById("price").value, direction:document.getElementById("direction").value}));}
-function sendDeposit(){tg.sendData(JSON.stringify({action:"deposit", amount:document.getElementById("dep_amount").value, method:document.getElementById("dep_method").value}));}
-function sendWithdraw(){tg.sendData(JSON.stringify({action:"withdraw", amount:document.getElementById("w_amount").value, wallet:document.getElementById("w_wallet").value}));}
-function sendSupport(){tg.sendData(JSON.stringify({action:"support", message:document.getElementById("support_text").value}));}
-</script>
-</body>
-</html>
+def db_connect():
+    return sqlite3.connect(DATABASE)
+
+
+def init_db():
+    with db_connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                balance REAL DEFAULT 0.0,
+                referrer INTEGER,
+                registered_at TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS positions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                action TEXT,
+                coin TEXT,
+                amount REAL,
+                price REAL,
+                created_at TEXT,
+                status TEXT DEFAULT 'open',
+                profit REAL DEFAULT 0.0
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS requisites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                details TEXT,
+                active INTEGER DEFAULT 1
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS support (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                message TEXT,
+                status TEXT DEFAULT 'open',
+                created_at TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                event TEXT,
+                amount REAL,
+                details TEXT,
+                created_at TEXT
+            )
+            """
+        )
+
+
+def create_user(user_id, username, referrer=None):
+    with db_connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
+        if not cur.fetchone():
+            cur.execute(
+                """
+                INSERT INTO users (user_id, username, referrer, registered_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, username, referrer, datetime.utcnow().isoformat()),
+            )
+
+
+def get_balance(user_id):
+    with db_connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+        row = cur.fetchone()
+    return float(row[0]) if row else 0.0
+
+
+def get_requisites():
+    with db_connect() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT name, details FROM requisites WHERE active = 1")
+        return cur.fetchall()
+
+
+def add_support_ticket(user_id, message):
+    with db_connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO support (user_id, message, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (user_id, message, datetime.utcnow().isoformat()),
+        )
+
+
+def add_history_event(user_id, event, amount, details):
+    with db_connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO history (user_id, event, amount, details, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (user_id, event, amount, details, datetime.utcnow().isoformat()),
+        )
+
+
+def parse_positive_number(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number <= 0:
+        return None
+    return round(number, 8)
+
+
+async def notify_admin(context: ContextTypes.DEFAULT_TYPE, text: str):
+    try:
+        await context.bot.send_message(ADMIN_USER_ID, text)
+    except Exception:
+        logger.exception("Failed to notify admin")
+
+
+def main_menu():
+    keyboard = [
+        [
+            InlineKeyboardButton("Торговать", callback_data="trade"),
+            InlineKeyboardButton("Баланс", callback_data="balance"),
+        ],
+        [
+            InlineKeyboardButton("Депозит", callback_data="deposit"),
+            InlineKeyboardButton("Вывод", callback_data="withdraw"),
+        ],
+        [
+            InlineKeyboardButton("Реквизиты", callback_data="requisites"),
+            InlineKeyboardButton("Техподдержка", callback_data="support"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def webapp_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("Открыть миниапп", web_app=WebAppInfo(url=WEBAPP_URL))],
+            ["Главное меню"],
+        ],
+        resize_keyboard=True,
+    )
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    create_user(user.id, user.username or user.full_name)
+    await update.message.reply_text(
+        "Привет! Нажми кнопку 'Открыть миниапп' рядом с полем ввода или выбери действие ниже.",
+        reply_markup=webapp_keyboard(),
+    )
+
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    create_user(user.id, user.username or user.full_name)
+    await update.message.reply_text("Главное меню:", reply_markup=main_menu())
+
+
+async def open_webapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    create_user(user.id, user.username or user.full_name)
+    await update.message.reply_text(
+        "Открой миниапп кнопкой ниже.",
+        reply_markup=webapp_keyboard(),
+    )
+
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip().lower()
+    if text in {"/start", "меню", "главное меню"}:
+        await menu(update, context)
+        return
+    if text in {"/web", "миниапп", "открыть миниапп"}:
+        await open_webapp(update, context)
+        return
+    await update.message.reply_text("Используй кнопки меню или команду /web.")
+
+
+async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    user = query.from_user
+    create_user(user.id, user.username or user.full_name)
+
+    if data == "trade":
+        await query.message.reply_text(
+            "Открой миниапп для создания сделки.",
+            reply_markup=webapp_keyboard(),
+        )
+        return
+    if data == "balance":
+        balance = get_balance(user.id)
+        await query.message.reply_text(f"Баланс: {balance:.2f} USDT")
+        return
+    if data == "deposit":
+        await query.message.reply_text(
+            "Открой миниапп, чтобы создать заявку на депозит.",
+            reply_markup=webapp_keyboard(),
+        )
+        return
+    if data == "withdraw":
+        await query.message.reply_text(
+            "Открой миниапп, чтобы создать заявку на вывод.",
+            reply_markup=webapp_keyboard(),
+        )
+        return
+    if data == "requisites":
+        rows = get_requisites()
+        text = "Реквизиты:\n"
+        text += "\n".join(f"{name}: {details}" for name, details in rows) if rows else "Реквизиты пока не добавлены."
+        await query.message.reply_text(text)
+        return
+    if data == "support":
+        await query.message.reply_text(
+            "Открой миниапп, чтобы написать в поддержку.",
+            reply_markup=webapp_keyboard(),
+        )
+
+
+async def webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message
+    web_app_data = getattr(message, "web_app_data", None)
+    if not web_app_data:
+        return
+
+    user = update.effective_user
+    create_user(user.id, user.username or user.full_name)
+
+    try:
+        payload = json.loads(web_app_data.data)
+    except json.JSONDecodeError:
+        await message.reply_text("Не удалось прочитать данные из миниаппа.")
+        return
+
+    action = payload.get("action")
+
+    if action == "trade":
+        coin = payload.get("coin")
+        direction = payload.get("direction")
+        amount = parse_positive_number(payload.get("amount"))
+        price = parse_positive_number(payload.get("price"))
+
+        if coin not in ALLOWED_COINS or direction not in ALLOWED_DIRECTIONS:
+            await message.reply_text("Недопустимые параметры сделки.")
+            return
+        if amount is None or price is None:
+            await message.reply_text("Введите корректные сумму и цену.")
+            return
+        if get_balance(user.id) < amount:
+            await message.reply_text("Недостаточно средств.")
+            return
+
+        with db_connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE users SET balance = balance - ? WHERE user_id = ? AND balance >= ?",
+                (amount, user.id, amount),
+            )
+            if cur.rowcount != 1:
+                await message.reply_text("Недостаточно средств.")
+                return
+            cur.execute(
+                """
+                INSERT INTO positions (user_id, action, coin, amount, price, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (user.id, direction, coin, amount, price, datetime.utcnow().isoformat()),
+            )
+            cur.execute(
+                """
+                INSERT INTO history (user_id, event, amount, details, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    user.id,
+                    "trade_open",
+                    -amount,
+                    f"{direction} {coin} @ {price}",
+                    datetime.utcnow().isoformat(),
+                ),
+            )
+
+        await message.reply_text("Сделка открыта. Средства зарезервированы.")
+        return
+
+    if action == "deposit":
+        amount = parse_positive_number(payload.get("amount"))
+        method = str(payload.get("method", "crypto")).strip().lower()
+
+        if amount is None:
+            await message.reply_text("Введите корректную сумму депозита.")
+            return
+        if method not in {"crypto", "card"}:
+            await message.reply_text("Недопустимый способ пополнения.")
+            return
+
+        add_history_event(user.id, "deposit_request", amount, method)
+        await message.reply_text("Заявка на депозит создана. Баланс будет пополнен после проверки оплаты.")
+        await notify_admin(context, f"Заявка на депозит: user={user.id} amount={amount} method={method}")
+        return
+
+    if action == "withdraw":
+        amount = parse_positive_number(payload.get("amount"))
+        wallet = str(payload.get("wallet", "")).strip()
+
+        if amount is None or not wallet:
+            await message.reply_text("Введите корректную сумму и кошелек.")
+            return
+        if len(wallet) > MAX_WALLET_LEN:
+            await message.reply_text("Кошелек слишком длинный.")
+            return
+        if get_balance(user.id) < amount:
+            await message.reply_text("Недостаточно средств.")
+            return
+
+        add_history_event(user.id, "withdraw_request", amount, wallet)
+        await message.reply_text("Заявка на вывод принята и отправлена на проверку.")
+        await notify_admin(context, f"Заявка на вывод: user={user.id} amount={amount} wallet={wallet}")
+        return
+
+    if action == "support":
+        text = str(payload.get("message", "")).strip()
+        if not text:
+            await message.reply_text("Напишите сообщение.")
+            return
+        if len(text) > MAX_SUPPORT_LEN:
+            await message.reply_text("Сообщение слишком длинное.")
+            return
+
+        add_support_ticket(user.id, text)
+        await message.reply_text("Сообщение отправлено в поддержку.")
+        await notify_admin(context, f"Техподдержка от {user.id}: {text}")
+        return
+
+    await message.reply_text("Неизвестное действие.")
+
+
+def main():
+    if not TOKEN:
+        raise RuntimeError("Set BOT_TOKEN environment variable before starting the bot.")
+
+    init_db()
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", menu))
+    app.add_handler(CommandHandler("web", open_webapp))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(CallbackQueryHandler(callback_handler))
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data))
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
