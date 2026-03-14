@@ -14,7 +14,7 @@
         .tab-content { display: none; }
         .tab-content.active { display: block !important; }
         .card { background: var(--card); padding: 15px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 10px; }
-        .chart-container { width: 100%; height: 300px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 10px; }
+        .chart-container { width: 100%; height: 260px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 10px; }
         label { font-size: 10px; color: #848e9c; display: block; margin-bottom: 5px; text-transform: uppercase; }
         select, input { width: 100%; background: #2b3139; border: 1px solid #474d57; color: white; padding: 12px; border-radius: 8px; box-sizing: border-box; font-size: 16px; margin-bottom: 10px; outline: none; }
         .leverage-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 15px; }
@@ -34,7 +34,6 @@
         <div class="tab" onclick="switchTab('withdraw', this)">ВЫВОД</div>
         <div class="tab" onclick="switchTab('deposit', this)">ПОПОЛНИТЬ</div>
     </div>
-    <!-- ТРЕЙДИНГ -->
     <div id="trade-tab" class="tab-content active">
         <div class="chart-container">
             <iframe id="tv-chart" src="https://s.tradingview.com/widgetembed/?symbol=BINANCE:BTCUSDT&theme=dark" width="100%" height="100%" frameborder="0"></iframe>
@@ -46,18 +45,28 @@
                 <option value="ETHUSDT">Ethereum (ETH)</option>
                 <option value="SOLUSDT">Solana (SOL)</option>
                 <option value="XRPUSDT">Ripple (XRP)</option>
-                <option value="DOGEUSDT">Dogecoin (DOGE)</option>
                 <option value="BNBUSDT">Binance (BNB)</option>
                 <option value="PEPEUSDT">Pepe (PEPE)</option>
+                <option value="TONUSDT">TON (TON)</option>
+                <option value="TRXUSDT">TRX (TRX)</option>
+                <option value="SHIBUSDT">Shiba (SHIB)</option>
+                <option value="ADAUSDT">Cardano (ADA)</option>
+                <option value="LTCUSDT">Litecoin (LTC)</option>
+                <option value="MATICUSDT">Polygon (MATIC)</option>
+                <option value="AVAXUSDT">Avalanche (AVAX)</option>
+                <option value="LINKUSDT">Chainlink (LINK)</option>
+                <option value="UNIUSDT">Uniswap (UNI)</option>
+                <option value="SUIUSDT">Sui (SUI)</option>
+                <option value="APTUSDT">Aptos (APT)</option>
             </select>
-            <label>Кредитное плечо</label>
+            <label>Плечо</label>
             <div class="leverage-grid">
                 <button class="lev-btn active" onclick="setLev(1, this)">x1</button>
                 <button class="lev-btn" onclick="setLev(20, this)">x20</button>
                 <button class="lev-btn" onclick="setLev(50, this)">x50</button>
                 <button class="lev-btn" onclick="setLev(125, this)">x125</button>
             </div>
-            <label>Сумма сделки (USDT)</label>
+            <label>Сумма (USDT)</label>
             <input type="number" id="amount" value="100">
             <div class="btn-group">
                 <button class="action buy" onclick="process('LONG')">LONG</button>
@@ -65,80 +74,41 @@
             </div>
         </div>
     </div>
-    <!-- ИСТОРИЯ -->
     <div id="history-tab" class="tab-content">
-        <div class="card" style="text-align: center; padding: 40px; color: #848e9c;">
+        <div class="card" style="text-align:center; padding: 40px; color:#848e9c;">
             <div style="font-size: 40px;">📜</div>
-            <p>Ваши сделки сохраняются в базе данных. Проверьте кнопку "История" в боте.</p>
+            <p>Сделки сохраняются в боте. Нажмите История в боте.</p>
         </div>
     </div>
-    <!-- ВЫВОД -->
     <div id="withdraw-tab" class="tab-content">
         <div class="card">
-            <label>Адрес кошелька (TRC-20)</label>
-            <input type="text" id="wallet" placeholder="T...">
+            <label>Реквизит</label>
+            <select id="requisite"></select>
             <label>Сумма вывода (USDT)</label>
             <input type="number" id="w_amount" placeholder="Минимум 10">
             <button class="withdraw-btn" onclick="makeWithdraw()">СОЗДАТЬ ЗАЯВКУ</button>
         </div>
     </div>
-    <!-- ПОПОЛНЕНИЕ -->
     <div id="deposit-tab" class="tab-content">
         <div class="card">
+            <label>Реквизит</label>
+            <select id="requisite_deposit"></select>
             <label>Сумма пополнения (USDT)</label>
             <input type="number" id="d_amount" placeholder="Введите сумму">
             <button class="deposit-btn" onclick="makeDeposit()">ПОПОЛНИТЬ</button>
         </div>
     </div>
     <script>
-        let tg = window.Telegram.WebApp;
-        tg.expand();
+        let tg = window.Telegram.WebApp; tg.expand();
         let currentLev = 1;
-        function switchTab(tabId, el) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            el.classList.add('active');
-            document.getElementById(tabId + '-tab').classList.add('active');
-        }
-        function setLev(val, el) {
-            currentLev = val;
-            document.querySelectorAll('.lev-btn').forEach(b => b.classList.remove('active'));
-            el.classList.add('active');
-        }
-        function updateChart() {
-            const sym = document.getElementById('asset').value;
-            document.getElementById('tv-chart').src = `https://s.tradingview.com/widgetembed/?symbol=BINANCE:${sym}&theme=dark`;
-        }
-        function process(side) {
-            const amount = Number(document.getElementById('amount').value);
-            if (!amount || amount <= 0) return tg.showAlert("Введите сумму сделки!");
-            const data = {
-                type: 'trade',
-                action: side,
-                symbol: document.getElementById('asset').value,
-                amount: amount,
-                lev: currentLev
-            };
-            tg.sendData(JSON.stringify(data));
-        }
-        function makeWithdraw() {
-            const addr = document.getElementById('wallet').value;
-            const amt = Number(document.getElementById('w_amount').value);
-            if(!addr || !amt || amt < 10) return tg.showAlert("Заполните поля и укажите сумму не менее 10!");
-            tg.sendData(JSON.stringify({
-                type: 'withdraw',
-                wallet: addr,
-                amount: amt
-            }));
-        }
-        function makeDeposit() {
-            const amt = Number(document.getElementById('d_amount').value);
-            if (!amt || amt <= 0) return tg.showAlert("Введите корректную сумму!");
-            tg.sendData(JSON.stringify({
-                type: 'deposit',
-                amount: amt
-            }));
-        }
+        function switchTab(tabId, el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));el.classList.add('active');document.getElementById(tabId+'-tab').classList.add('active');}
+        function setLev(val, el){currentLev=val;document.querySelectorAll('.lev-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');}
+        function updateChart(){const sym=document.getElementById('asset').value;document.getElementById('tv-chart').src=`https://s.tradingview.com/widgetembed/?symbol=BINANCE:${sym}&theme=dark`;}
+        function refreshReqs(){const list=['TRC-20 Wallet 1','TRC-20 Wallet 2']; const sel=document.getElementById('requisite'); const sel2=document.getElementById('requisite_deposit'); sel.innerHTML=''; sel2.innerHTML=''; list.forEach(v=>{const o=document.createElement('option');o.value=v;o.innerText=v;sel.appendChild(o);const o2=document.createElement('option');o2.value=v;o2.innerText=v;sel2.appendChild(o2);});}
+        refreshReqs();
+        function process(side){const amount=Number(document.getElementById('amount').value);if(!amount||amount<=0)return tg.showAlert('Введите сумму!');tg.sendData(JSON.stringify({type:'trade',action:side,symbol:document.getElementById('asset').value,amount:amount,lev:currentLev}));}
+        function makeWithdraw(){const addr=document.getElementById('requisite').value;const amt=Number(document.getElementById('w_amount').value);if(!addr||!amt||amt<10)return tg.showAlert('Заполните поля и укажите сумму >=10');tg.sendData(JSON.stringify({type:'withdraw',wallet:addr,amount:amt}));}
+        function makeDeposit(){const addr=document.getElementById('requisite_deposit').value;const amt=Number(document.getElementById('d_amount').value);if(!addr||!amt||amt<=0)return tg.showAlert('Введите сумму пополнения');tg.sendData(JSON.stringify({type:'deposit',wallet:addr,amount:amt}));}
     </script>
 </body>
 </html>
